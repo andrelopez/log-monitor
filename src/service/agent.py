@@ -1,26 +1,23 @@
-from src.utils import utils
-import threading
-from twisted.internet import task, reactor
-from src.model.request import Request
-from src.model.section_traffic_stat import SectionTrafficStats
-from cachetools import TTLCache
+from src.model.server import Request, SectionTrafficStats, Observable, ServerStateMachine
 from src.config import ALERT_INTERVAL, DISPLAY_INTERVAL, THRESHOLD, TOP_SECTIONS
+from twisted.internet import task, reactor
+from cachetools import TTLCache
+from src.event.event import NewDataEvent
+from typing import List
+import threading
 import heapq
 import time
-from typing import List
-import click
 
 
-class Agent:
+class Agent(Observable):
     """
     Agent will be reading the log file and calling
     """
 
-    def __init__(self, file_path: str):
-        # @todo assume end of file, create simulator
+    def __init__(self, file_path: str, server_state_machine: ServerStateMachine):
+        self.server_state_machine = server_state_machine
         self._interval_cache = TTLCache(maxsize=float('inf'), ttl=ALERT_INTERVAL)
         self._stats = {}
-        self._last_stats = {}
         self._file_path = file_path
         self._alert_message = ''
         self._agent_daemon = threading.Thread(target=self._read_file, daemon=True)
@@ -30,16 +27,14 @@ class Agent:
     def run(self):
         self._agent_daemon.start()
 
-        print_screen = task.LoopingCall(self._draw_screen)
-        print_screen.start(1)
-
-        update_stats = task.LoopingCall(self._update_stats)
+        update_stats = task.LoopingCall(self._fire_new_data_event)
         update_stats.start(DISPLAY_INTERVAL)
 
         reactor.run()
 
-    def _draw_screen(self):
-        utils.draw(self._get_top_sections(), self._get_alert_message())
+    def _fire_new_data_event(self):
+        event = NewDataEvent(self._get_top_sections())
+        self.notify(event)
 
     def _get_top_sections(self) -> List[SectionTrafficStats]:
         if not self._last_stats:
@@ -56,11 +51,7 @@ class Agent:
 
         return top_sections
 
-    def _update_stats(self):
-        self._last_stats = self._stats
-        self._stats = {}
-
-    def _get_alert_message(self) -> str:
+    def _check_state_machine(self) -> str:
         alert_message = ""
         if self._is_high_traffic() and self._high_traffic_recovered:
             alert_message = f"High traffic generated an alert - hits =" \
@@ -75,7 +66,6 @@ class Agent:
         return self._get_average_hits_by_second() >= THRESHOLD
 
     def _get_average_hits_by_second(self):
-        click.echo(len(self._interval_cache))
         return len(self._interval_cache) / ALERT_INTERVAL
 
     def _read_file(self):
@@ -85,6 +75,7 @@ class Agent:
 
             for request in log_lines:
                 self._process_request(request)
+                time.sleep(0.2)
 
     def _process_request(self, request: str):
         request = Request(request)
