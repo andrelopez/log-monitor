@@ -5,11 +5,11 @@ import zope.event
 
 class Request:
     def __init__(self, request_line: str):
-        self._remotehost, self._rfc931, self._authuser, self._timestamp,\
+        self._remotehost, self._rfc931, self._authuser, self.timestamp,\
             self._request, self.status, self._bytes = request_line.split(',')
-        self.timestamp = int(self._timestamp)
+        self.timestamp = int(self.timestamp)
         self.section = self._request.split(' ')[1].split('/')[1]
-        self.date = datetime.utcfromtimestamp(self._timestamp).strftime('%Y-%m-%d %H:%M:%S')
+        self.date = datetime.utcfromtimestamp(self.timestamp).strftime('%Y-%m-%d %H:%M:%S')
 
 
 class SectionTrafficStats:

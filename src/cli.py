@@ -1,8 +1,6 @@
 import click
 from src.service.agent import Agent
 import os
-import pandas as pd
-import time
 from src.model.server import ServerStateMachine
 from src.utils.utils import Screen
 
