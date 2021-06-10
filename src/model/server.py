@@ -93,6 +93,11 @@ class Stats:
 
         stats.oldest_request = request
 
+    def should_send_new_data(self):
+        if self._last_request.timestamp not in self._current_slot_times:
+            print("NEXT!! " + str(self._last_request.timestamp))
+        return True if self._last_request.timestamp not in self._current_slot_times else False
+
 
 class Observable:
     def add_subscriber(self, function):

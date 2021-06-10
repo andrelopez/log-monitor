@@ -69,11 +69,6 @@ class Agent(Observable):
         # @TODO CHANGE THIS TO GET FROM CLASS STATS
         self._set_oldest(self._last_request)
 
-    def _should_send_new_data(self):
-        if self._last_request.timestamp not in self._current_slot_times:
-            print("NEXT!! " + str(self._last_request.timestamp))
-        return True if self._last_request.timestamp not in self._current_slot_times else False
-
     def _get_top_sections(self) -> List[Stats.SectionTrafficStats]:
         sections = [stat for stat in self._stats.values()]
         heapq.heapify(sections)
