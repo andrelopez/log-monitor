@@ -1,21 +1,71 @@
+from src.config import SCREEN_INTERVAL, TOP_SECTIONS
+from src.event.event import StateChangeEvent, NewRequestsEvent
+from src.model.server import Observable, Request
+from collections import deque
 from columnar import columnar
+from typing import List, Dict
 import click
 import heapq
-from src.config import SCREEN_INTERVAL
-from src.event.event import NewDataEvent, StateChangeEvent
-from collections import deque
 import time
 
 
 class Screen:
+    class Stats:
+        class SectionTrafficStats:
+            def __init__(self, section: str):
+                self.hits_by_status = {}
+                self.section = section
+                self.total_hits = 0
+
+            def add_request(self, request: Request):
+                self.hits_by_status.setdefault(request.status, 0)
+                self.hits_by_status[request.status] += 1
+                self.total_hits += 1
+
+            def __lt__(self, other):
+                return self.total_hits > other.total_hits
+
+        def __init__(self, requests: List[Request]):
+            self._requests = requests
+            self._top_sections = []
+            self._process_stats()
+
+        def get_top_sections(self) -> List[SectionTrafficStats]:
+            return self._top_sections
+
+        def _process_stats(self):
+            stats = {}
+
+            for request in self._requests:
+                if request.section not in stats:
+                    section_stat = self.SectionTrafficStats(request.section)
+                    stats[request.section] = section_stat
+
+                section_stat = stats.get(request.section)
+                section_stat.add_request(request)
+
+            self._get_top_sections(stats)
+
+        def _get_top_sections(self, stats: Dict):
+            sections = [stat for stat in stats.values()]
+            heapq.heapify(sections)
+
+            self._top_sections = []
+            top_k = TOP_SECTIONS if len(sections) > TOP_SECTIONS else len(sections)
+
+            for i in range(top_k):
+                self._top_sections.append(heapq.heappop(sections))
+
     def __init__(self):
         self._new_data_queue = deque([])
         self._alarms_new_data_queue = deque([])
         self._progress_bar = [second for second in reversed(range(1, SCREEN_INTERVAL + 1))]
 
-    def on_new_data(self, event: NewDataEvent):
-        print('NEW DATA EVENT: ' + str(len(event.traffic_stats)))
-        self._new_data_queue.append(event.traffic_stats)
+    def on_new_data(self, event: NewRequestsEvent):
+        print('NEW REQUESTS EVENT: ' + str(len(event.requests)))
+
+        stats = self.Stats(event.requests)
+        self._new_data_queue.append(stats.get_top_sections())
         self._draw()
 
     def on_server_state_change(self, event: StateChangeEvent):
@@ -23,9 +73,6 @@ class Screen:
 
     def _draw(self):
         click.clear()
-        if not self._new_data_queue:
-            click.secho('No HTTP requests', fg='green')
-            return
 
         traffic_stats = self._new_data_queue.popleft()
 
@@ -42,7 +89,7 @@ class Screen:
         table = columnar(table, no_borders=True)
         click.secho(str(table), fg='green')
 
-        #self._display_progress_bar()
+        self._display_progress_bar()
 
         # if alert_message:
         #     click.secho(alert_message, fg='red')
@@ -104,3 +151,59 @@ class TTLCache:
 
     def _remove_oldest(self):
         heapq.heappop(self._heap)
+
+
+class TTLRequestCache(Observable):
+    """
+    This class will store requests in a MIN heap
+    the oldest request will be at the root
+    and to fix order requests from the log file
+    we we'll fire the event of new data after a new request
+    is higher than DISPLAY_INTERVAL + LOG_DELAY
+    the LOG_DELAY can be updated on the config file as needed
+    """
+    def __init__(self, ttl: int, log_delay: int):
+        self.ttl = ttl
+        self.log_delay = log_delay
+        self._heap = []
+
+    def append(self, request: Request):
+        self._resize(request)
+        heapq.heappush(self._heap, request)
+
+    def __len__(self):
+        return len(self._heap)
+
+    def _resize(self, new_request: Request):
+        if self._is_empty():
+            return
+
+        head = self._get_head()
+        diff = new_request.timestamp - head.timestamp
+
+        if diff > (self.ttl + self.log_delay):
+            self._trigger_new_data_event()
+
+    def _get_head(self):
+        return self._heap[0]
+
+    def _is_empty(self):
+        return len(self._heap) == 0
+
+    def _trigger_new_data_event(self):
+        requests = self._get_requests()
+        event = NewRequestsEvent(requests)
+        self.notify(event)
+
+    def _get_requests(self):
+        requests = []
+        oldest = self._get_head()
+        while self._heap:
+            current_request = self._get_head()
+            if current_request.timestamp > oldest.timestamp + self.ttl - 1:
+                break
+
+            heapq.heappop(self._heap)
+            requests.append(current_request)
+
+        return requests
