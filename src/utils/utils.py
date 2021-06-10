@@ -1,9 +1,7 @@
 from columnar import columnar
-from typing import List
-from src.model.server import SectionTrafficStats
 import click
 import heapq
-from src.config import DISPLAY_INTERVAL, SCREEN_INTERVAL
+from src.config import SCREEN_INTERVAL
 from src.event.event import NewDataEvent, StateChangeEvent
 from collections import deque
 import time
@@ -30,6 +28,11 @@ class Screen:
             return
 
         traffic_stats = self._new_data_queue.popleft()
+
+        if not traffic_stats:
+            click.secho('No HTTP requests', fg='green')
+            return
+
         click.secho('*****LOG MONITOR*******', fg='green')
         table = []
         for traffic_stat in traffic_stats:
@@ -39,7 +42,7 @@ class Screen:
         table = columnar(table, no_borders=True)
         click.secho(str(table), fg='green')
 
-        self._display_progress_bar()
+        #self._display_progress_bar()
 
         # if alert_message:
         #     click.secho(alert_message, fg='red')

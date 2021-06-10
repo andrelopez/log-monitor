@@ -17,8 +17,7 @@ class Agent(Observable):
     def __init__(self, file_path: str, server_state_machine: ServerStateMachine):
         self.server_state_machine = server_state_machine
         self._interval_cache = TTLCache(ttl=1)
-        self._stats = {}
-        self._delay_stats = {}
+        self._stats = Stats()
 
         self._file_path = file_path
         self._alert_message = ''
@@ -49,28 +48,19 @@ class Agent(Observable):
         print(request.timestamp)
         self._interval_cache.append(request.timestamp)
 
-        self._set_last_request(request)
-        self._update_oldest_request(request)
-        self._fire_new_data_event()
-        # @todo call object
-        self._add_request_to_stats(request)
+        self._stats.add_request(request)
+
+        if self._stats.should_raise_event(request):
+            self._fire_new_data_event()
+            self._stats.add_request(request)
 
     def _fire_new_data_event(self):
-        if not self._should_send_new_data():
-            return
-
         event = NewDataEvent(self._get_top_sections())
         self.notify(event)
-        self._reset_stats()
-
-    def _reset_stats(self):
-        self._stats = self._delay_stats
-        self._delay_stats = {}
-        # @TODO CHANGE THIS TO GET FROM CLASS STATS
-        self._set_oldest(self._last_request)
+        self._stats.reset_stats()
 
     def _get_top_sections(self) -> List[Stats.SectionTrafficStats]:
-        sections = [stat for stat in self._stats.values()]
+        sections = [stat for stat in self._stats.stats_by_section.values()]
         heapq.heapify(sections)
 
         top_sections = []
