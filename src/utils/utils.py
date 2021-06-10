@@ -3,7 +3,7 @@ from typing import List
 from src.model.server import SectionTrafficStats
 import click
 import heapq
-from src.config import DISPLAY_INTERVAL
+from src.config import DISPLAY_INTERVAL, SCREEN_INTERVAL
 from src.event.event import NewDataEvent, StateChangeEvent
 from collections import deque
 import time
@@ -13,7 +13,7 @@ class Screen:
     def __init__(self):
         self._new_data_queue = deque([])
         self._alarms_new_data_queue = deque([])
-        self._progress_bar = [second for second in reversed(range(1, DISPLAY_INTERVAL +1))]
+        self._progress_bar = [second for second in reversed(range(1, SCREEN_INTERVAL + 1))]
 
     def on_new_data(self, event: NewDataEvent):
         print('NEW DATA EVENT: ' + str(len(event.traffic_stats)))
@@ -24,6 +24,7 @@ class Screen:
         pass
 
     def _draw(self):
+        click.clear()
         if not self._new_data_queue:
             click.secho('No HTTP requests', fg='green')
             return
@@ -38,10 +39,7 @@ class Screen:
         table = columnar(table, no_borders=True)
         click.secho(str(table), fg='green')
 
-
-        click.clear()
-
-        #self._display_progress_bar()
+        self._display_progress_bar()
 
         # if alert_message:
         #     click.secho(alert_message, fg='red')

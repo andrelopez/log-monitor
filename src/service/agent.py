@@ -49,7 +49,7 @@ class Agent(Observable):
 
     def _process_request(self, log_line: str):
         request = Request(log_line)
-        print(request.date)
+        print(request.timestamp)
         self._interval_cache.append(request.timestamp)
 
         self._set_last_request(request)
@@ -58,11 +58,14 @@ class Agent(Observable):
         self._add_request_to_stats(request)
 
     def _add_request_to_stats(self, request: Request):
-        stats = self._stats
         if request.timestamp in self._delay_slot_times:
-            stats = self._delay_stats
-            print('Added to delay '+ str(request.date))
+            self._store_request(self._delay_stats, request)
+            # print("Added to delay "+request.date)
+            return
 
+        self._store_request(self._stats, request)
+
+    def _store_request(self, stats, request: Request):
         if request.section not in stats:
             section_stat = SectionTrafficStats(request.section)
             stats[request.section] = section_stat
@@ -70,6 +73,8 @@ class Agent(Observable):
         section_stat = stats.get(request.section)
         section_stat.add_request(request)
 
+        # Ojo con este es total hit de la section
+        # print('Total hits' + str(section_stat.total_hits))
 
     def _set_last_request(self, request: Request):
         if self._last_request:
@@ -121,6 +126,7 @@ class Agent(Observable):
     def _reset_stats(self):
         self._stats = self._delay_stats
         self._delay_stats = {}
+        # @TODO CHANGE THIS TO GET FROM CLASS STATS
         self._set_oldest(self._last_request)
 
     def _should_send_new_data(self):
