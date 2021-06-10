@@ -1,4 +1,4 @@
-from src.model.server import Request, SectionTrafficStats, Observable, ServerStateMachine
+from src.model.server import Request, Stats, Observable, ServerStateMachine
 from src.config import ALERT_INTERVAL, DISPLAY_INTERVAL, THRESHOLD, TOP_SECTIONS, LOG_DELAY
 from twisted.internet import task, reactor
 from src.utils.utils import TTLCache
@@ -19,14 +19,11 @@ class Agent(Observable):
         self._interval_cache = TTLCache(ttl=1)
         self._stats = {}
         self._delay_stats = {}
-        self._oldest_request = None
-        self._current_slot_times = set()
-        self._delay_slot_times = set()
+
         self._file_path = file_path
         self._alert_message = ''
         self._agent_daemon = threading.Thread(target=self._read_file)
         self._high_traffic_recovered = True
-        self._last_request = None
 
     def run(self):
         self._agent_daemon.start()
@@ -55,65 +52,8 @@ class Agent(Observable):
         self._set_last_request(request)
         self._update_oldest_request(request)
         self._fire_new_data_event()
+        # @todo call object
         self._add_request_to_stats(request)
-
-    def _add_request_to_stats(self, request: Request):
-        if request.timestamp in self._delay_slot_times:
-            self._store_request(self._delay_stats, request)
-            # print("Added to delay "+request.date)
-            return
-
-        self._store_request(self._stats, request)
-
-    def _store_request(self, stats, request: Request):
-        if request.section not in stats:
-            section_stat = SectionTrafficStats(request.section)
-            stats[request.section] = section_stat
-
-        section_stat = stats.get(request.section)
-        section_stat.add_request(request)
-
-        # Ojo con este es total hit de la section
-        # print('Total hits' + str(section_stat.total_hits))
-
-    def _set_last_request(self, request: Request):
-        if self._last_request:
-            if request.timestamp > self._last_request.timestamp:
-                self._last_request = request
-        else:
-            self._last_request = request
-
-    def _update_oldest_request(self, request: Request):
-        """
-        The order of the logs in the file is not guarantee so
-        we need  to make sure to update the oldest request if the
-        new request is oldest.
-        """
-        if not self._oldest_request:
-            self._set_oldest(request)
-            return
-
-        if request.timestamp < self._oldest_request.timestamp:
-            self._set_oldest(request)
-
-    def _set_oldest(self, request: Request):
-        self._current_slot_times.clear()
-        last_timestamp = None
-        self._current_slot_times = set()
-        self._delay_slot_times = set()
-
-        for second in range(DISPLAY_INTERVAL):
-            self._current_slot_times.add(request.timestamp + second)
-            last_timestamp = request.timestamp + second
-
-        for second in range(1, LOG_DELAY):
-            self._delay_slot_times.add(last_timestamp + second)
-
-        self._current_slot_times.update(self._delay_slot_times)
-        print('DELAY', self._delay_slot_times)
-        print('CURRENT', self._current_slot_times)
-
-        self._oldest_request = request
 
     def _fire_new_data_event(self):
         if not self._should_send_new_data():
@@ -134,7 +74,7 @@ class Agent(Observable):
             print("NEXT!! " + str(self._last_request.timestamp))
         return True if self._last_request.timestamp not in self._current_slot_times else False
 
-    def _get_top_sections(self) -> List[SectionTrafficStats]:
+    def _get_top_sections(self) -> List[Stats.SectionTrafficStats]:
         sections = [stat for stat in self._stats.values()]
         heapq.heapify(sections)
 
