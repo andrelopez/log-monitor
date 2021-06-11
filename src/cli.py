@@ -15,11 +15,9 @@ def cli(file):
 
     screen = Screen()
 
-    server_state_machine = ServerStateMachine()
-    server_state_machine.add_subscriber(screen.on_server_state_change)
-
-    agent = Agent(file, server_state_machine)
-    agent.add_subscriber(screen.on_new_data)
+    agent = Agent(file)
+    agent.add_state_change_subscriber(screen.on_server_state_change)
+    agent.add_data_subscriber(screen.on_new_data)
 
     agent.run()
 

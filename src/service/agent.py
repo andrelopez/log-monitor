@@ -10,8 +10,8 @@ class Agent:
     Agent will be reading the log file and calling
     """
 
-    def __init__(self, file_path: str, server_state_machine: ServerStateMachine):
-        self.server_state_machine = server_state_machine
+    def __init__(self, file_path: str):
+        self.server_state_machine = ServerStateMachine()
         self._interval_cache = TTLIntervalCache(ALERT_INTERVAL, LOG_DELAY, self.server_state_machine)
         self.requests = TTLRequestCache(DISPLAY_INTERVAL, LOG_DELAY)
 
@@ -23,8 +23,11 @@ class Agent:
     def run(self):
         self._agent_daemon.start()
 
-    def add_subscriber(self, function):
+    def add_data_subscriber(self, function):
         self.requests.add_subscriber(function)
+
+    def add_state_change_subscriber(self, function):
+        self.server_state_machine.add_subscriber(function)
 
     def _read_file(self):
         with open(self._file_path, "r") as log_file:
