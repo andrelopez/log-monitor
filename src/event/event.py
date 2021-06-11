@@ -1,16 +1,13 @@
-from src.model.server import ServerState, SectionTrafficStats
-from typing import List
-
-
-class NewDataEvent:
-    def __init__(self, traffic_stats: List[SectionTrafficStats]):
-        self.traffic_stats = traffic_stats
+class NewRequestsEvent:
+    def __init__(self, requests):
+        self.requests = requests
 
 
 class StateChangeEvent:
-    def __init__(self, server_state: ServerState, traffic_stats: List[SectionTrafficStats]):
+    def __init__(self, server_state, average_hits: float, timestamp: int):
         self.server_state = server_state
-        self.traffic_stats = traffic_stats
+        self.average_hits = average_hits
+        self.timestamp = timestamp
 
 
 

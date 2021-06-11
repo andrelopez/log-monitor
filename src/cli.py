@@ -1,8 +1,8 @@
 import click
 from src.service.agent import Agent
 import os
-from src.model.server import ServerStateMachine
 from src.utils.utils import Screen
+from src.model.server import ServerStateMachine
 
 
 @click.command()
@@ -16,10 +16,10 @@ def cli(file):
     screen = Screen()
 
     server_state_machine = ServerStateMachine()
-    server_state_machine.add_subscriber(screen.on_server_state_change)
-
     agent = Agent(file, server_state_machine)
-    agent.add_subscriber(screen.on_new_data)
+
+    agent.add_state_change_subscriber(screen.on_server_state_change)
+    agent.add_data_subscriber(screen.on_new_data)
 
     agent.run()
 
