@@ -23,6 +23,12 @@ Create a new Python 3 environment called venv and activate it (Mac or Linux):
 ~$ pip install --editable .
 ```
 
+A sample file is added at the root path so you can run the sample using the following command
+
+```bash
+~$  log-monitor "sample_csv.txt"
+```
+
 ## Tests
 
 The tests are under the `tests` directory
@@ -34,6 +40,65 @@ you can run the tests with the following command:
 
 ## Explanation
 
-The solution for this task was inspired on how I think some of the datadog products works.
+The solution for this task was inspired by how I think some of the datadog products works.
 
+Main roles:
 
+### State Machine: 
+Will handle events each time the machine pass from HIGH_TRAFFIC to GOOD (Recovered)
+and trigger the proper events when changing
+
+### Agent: 
+Will receive a two parameters:
+* File
+* State Machine
+
+The agent will create a thread to read the log file, here I created
+two data structures based on a MIN HEAP as the logs does no
+have order guaranteed, I decided to use a MIN HEAP to keep the requests
+in order and I set a LOG_DELAY value in the config file in order to give 
+a quick window between requests. This will give us 100% accuracy when
+raising the STATE_CHANGE_EVENT for the alarms.
+
+The MIN HEAPS have a TTL (time to live) approach to remove the oldest
+data for the NEW_REQUEST_EVENT will be DISPLAY_INTERVAL (default 10 secs) and for the
+alarm event will be ALERT_INTERVAL (default 120 secs), so the data will
+be deleted on each insert after passed the LOG_DELAY on the last request
+
+### Screen
+
+Following the Observer Pattern, the screen (in this case our CLI)
+it will subscribe for both events the NEW_REQUESTS_EVENT and the
+STATE_CHANGE_EVENT and store the events on separate queues,
+a thread will be running to check any new data on the first queue and
+and it will start showing the requests in a SCREEN_INTERVAL (by default is 3 seconds)
+during this window we'll check also the alerts queue and show the alert
+if the timestamp of the alert is in the current DISPLAY_INTERVAL window.
+
+The following diagram shows the design used for this task.
+
+![Alt text](./screenshots/design.png "Design")
+
+### Summary
+
+This approach can be extended by others services for example subscribing
+to the alarm event with a service like Twilio to send a SMS when the server 
+changes to HIGH_TRAFFIC.
+
+Also other UI can subscribe to the NEW_REQUESTS_EVENT to display the stats
+in other screens.
+
+## Improvements
+Here is a list where I think this solution can be improved
+
+- The current solution will read the file on one read, it will not wait
+to new lines, I added a comment where we can potentially change this behavior 
+  as simple as passing a new option to the CLI like `--read-real-time`
+  
+- Add unit tests for the Screen behavior
+
+- The stats were calculated on the Screen side handling the NEW_REQUESTS_EVENT it would be nice to raise an STATS event
+  with all the most important stats, however I decided to send the granular requests info so the Screens subscribers 
+  could calculate any stat that they want
+  
+- 
