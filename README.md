@@ -81,6 +81,38 @@ The following diagram shows the design used for this task.
 
 ![Alt text](./screenshots/design.png "Design")
 
+### Default Config Values
+
+The default config values are the following:
+
+```buildoutcfg
+# CONFIG
+# The display interval between requests in the log file in seconds
+DISPLAY_INTERVAL = 10
+
+# The alert interval to calculate the average of hits
+ALERT_INTERVAL = 120
+
+# The threshold to trigger the alarm
+THRESHOLD = 10
+
+# Expected CSV columns on the csv file
+CSV_COLUMNS = 7
+
+# DISPLAY SETTINGS
+# The screen interval to show the stats
+SCREEN_INTERVAL = 3
+
+# The top sections to show during each screen interval
+TOP_SECTIONS = 5
+
+# The log order is not guaranteed, increase in scenarios of high workload
+LOG_DELAY = 5
+```
+
+These config values need to be manually updated under `src/config.py`
+
+
 ### Summary
 
 This approach can be extended by others services for example subscribing
@@ -97,10 +129,12 @@ Here is a list where I think this solution can be improved
 to new lines, I added a comment where we can potentially change this behavior 
   as simple as passing a new option to the CLI like `--read-real-time`
   
+- Add more validations for handling wrong file formats and return proper responses
+  
 - Add unit tests for the Screen behavior
+
+- Add ability of update the default config values via the CLI
 
 - The stats were calculated on the Screen side handling the NEW_REQUESTS_EVENT it would be nice to raise an STATS event
   with all the most important stats, however I decided to send the granular requests info so the Screens subscribers 
-  could calculate any stat that they want
-  
-- 
+  could calculate any stat that they want.
