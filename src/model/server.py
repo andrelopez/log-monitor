@@ -42,7 +42,7 @@ class ServerStateMachine(Observable):
 
         if self._is_state_change_to_good_traffic(new_state):
             print(f'Back to good {unix_timestamp}')
-            self._trigger_on_high_traffic_event(average_hits, unix_timestamp)
+            self._trigger_on_good_traffic_event(average_hits, unix_timestamp)
 
     def _trigger_on_high_traffic_event(self, average_hits, unix_timestamp):
         self.notify(StateChangeEvent(ServerState.HIGH_TRAFFIC, average_hits, unix_timestamp))
