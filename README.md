@@ -29,6 +29,8 @@ A sample file is added at the root path so you can run the sample using the foll
 ~$  log-monitor "sample_csv.txt"
 ```
 
+![Alt text](./screenshots/screen.png "Screen")
+
 ## Tests
 
 The tests are under the `tests` directory
