@@ -145,7 +145,7 @@ class Screen:
         if event.server_state == ServerState.HIGH_TRAFFIC:
             message = f"High Traffic generated an alert - hits {event.average_hits:.2f} triggered at {date_formatted}"
         elif event.server_state == ServerState.GOOD:
-            message = f"Back to normal traffic generated at {date_formatted}"
+            message = f"Server recovered alert at {date_formatted}"
 
         return message
 

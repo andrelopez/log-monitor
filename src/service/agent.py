@@ -2,7 +2,6 @@ from src.model.server import Request, ServerStateMachine
 from src.config import ALERT_INTERVAL, DISPLAY_INTERVAL, LOG_DELAY, CSV_COLUMNS
 from src.utils.utils import TTLIntervalCache, TTLRequestCache
 import threading
-import time
 
 
 class Agent:
@@ -10,8 +9,8 @@ class Agent:
     Agent will be reading the log file and calling
     """
 
-    def __init__(self, file_path: str):
-        self.server_state_machine = ServerStateMachine()
+    def __init__(self, file_path: str, server_state_machine: ServerStateMachine):
+        self.server_state_machine = server_state_machine
         self._interval_cache = TTLIntervalCache(ALERT_INTERVAL, LOG_DELAY, self.server_state_machine)
         self.requests = TTLRequestCache(DISPLAY_INTERVAL, LOG_DELAY)
 
@@ -41,8 +40,8 @@ class Agent:
         while True:
             line = log_file.readline()
             if not line:
-                time.sleep(0.1)
-                continue
+                # end of file, we can set continue instead of break if we want to wait for new lines in real time
+                break
             yield line
 
     def _process_request(self, log_line: str):
