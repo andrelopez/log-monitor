@@ -20,6 +20,13 @@ class Screen:
                 self.section = section
                 self.total_hits = 0
 
+            def get_percentage_by_status(self, status):
+                status = str(status)
+                if status not in self.hits_by_status:
+                    return 0
+                total = (self.hits_by_status[status] / self.total_hits) * 100
+                return f"{total:.2f}%"
+
             def add_request(self, request: Request):
                 self.hits_by_status.setdefault(request.status, 0)
                 self.hits_by_status[request.status] += 1
@@ -126,11 +133,15 @@ class Screen:
                     color_server_status = 'red'
                 click.secho(f'Sever Status: {self._server_status.name}', fg=color_server_status)
                 table = []
+                headers = ['section', 'total hits', '200', '404', '500']
                 for traffic_stat in traffic_stats:
-                    row = [traffic_stat.section, traffic_stat.total_hits]
+                    row = [traffic_stat.section, traffic_stat.total_hits,\
+                           traffic_stat.get_percentage_by_status(200),\
+                           traffic_stat.get_percentage_by_status(404),\
+                           traffic_stat.get_percentage_by_status(500)]
                     table.append(row)
 
-                table = columnar(table, no_borders=True)
+                table = columnar(table, headers, no_borders=True)
                 click.secho(str(table), fg='green')
 
                 if alert_message:

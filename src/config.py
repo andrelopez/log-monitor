@@ -13,7 +13,7 @@ CSV_COLUMNS = 7
 
 # DISPLAY SETTINGS
 # The screen interval to show the stats
-SCREEN_INTERVAL = 2
+SCREEN_INTERVAL = 3
 
 # The top sections to show during each screen interval
 TOP_SECTIONS = 5

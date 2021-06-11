@@ -23,7 +23,7 @@ Create a new Python 3 environment called venv and activate it (Mac or Linux):
 ~$ pip install --editable .
 ```
 
-### Tests
+## Tests
 
 The tests are under the `tests` directory
 you can run the tests with the following command:
@@ -31,3 +31,9 @@ you can run the tests with the following command:
 ```bash
 ~$ python -m unittest  tests/test_log_monitor.py   
 ```
+
+## Explanation
+
+The solution for this task was inspired on how I think some of the datadog products works.
+
+
