@@ -8,6 +8,7 @@ from typing import List, Dict
 import click
 import heapq
 import time
+import threading
 from datetime import datetime
 
 
@@ -66,6 +67,8 @@ class Screen:
         self._progress_bar = [second for second in reversed(range(1, SCREEN_INTERVAL + 1))]
         self._last_alarm = None
         self._server_status = ServerState.GOOD
+        self._draw_thread = threading.Thread(target=self._draw)
+        self._draw_thread.start()
 
     def on_new_data(self, event: NewRequestsEvent):
         if not isinstance(event, NewRequestsEvent):
@@ -73,7 +76,6 @@ class Screen:
 
         stats = self.Stats(event.requests)
         self._new_data_queue.append(stats)
-        self._draw()
 
     def on_server_state_change(self, event: StateChangeEvent):
         if not isinstance(event, StateChangeEvent):
@@ -82,8 +84,16 @@ class Screen:
         self._alarms_queue.append(event)
 
     def _draw(self):
-        click.clear()
+        while True:
+            click.clear()
+            if self._new_data_queue:
+                self._print_data()
+                continue
 
+            click.secho('No HTTP requests', fg='green')
+            time.sleep(0.5)
+
+    def _print_data(self):
         stats = self._new_data_queue.popleft()
         traffic_stats = stats.get_top_sections()
 
@@ -101,31 +111,32 @@ class Screen:
 
                 self._last_alarm = None
 
-        if not traffic_stats:
-            click.secho('No HTTP requests', fg='green')
-            return
+        with click.progressbar(self._progress_bar) as bar:
+            for x in bar:
+                print(f" for new interval ...")
+                if not traffic_stats:
+                    click.secho('No HTTP requests', fg='green')
+                    return
 
-        click.secho('*****LOG MONITOR*******', fg='green')
-        click.secho(f'From: {stats.from_request.date}', fg='green')
-        click.secho(f'To: {stats.to_request.date}', fg='green')
-        click.secho(f'Alarms in the queue {len(self._alarms_queue)}', fg='green')
-        color_server_status = 'blue'
-        if self._server_status == ServerState.HIGH_TRAFFIC:
-            color_server_status = 'red'
-        click.secho(f'Sever Status: {self._server_status.name}', fg=color_server_status)
-        table = []
-        for traffic_stat in traffic_stats:
-            row = [traffic_stat.section, traffic_stat.total_hits]
-            table.append(row)
+                click.secho('*****LOG MONITOR*******', fg='green')
+                click.secho(f'From: {stats.from_request.date}', fg='green')
+                click.secho(f'To: {stats.to_request.date}', fg='green')
+                color_server_status = 'blue'
+                if self._server_status == ServerState.HIGH_TRAFFIC:
+                    color_server_status = 'red'
+                click.secho(f'Sever Status: {self._server_status.name}', fg=color_server_status)
+                table = []
+                for traffic_stat in traffic_stats:
+                    row = [traffic_stat.section, traffic_stat.total_hits]
+                    table.append(row)
 
-        table = columnar(table, no_borders=True)
-        click.secho(str(table), fg='green')
+                table = columnar(table, no_borders=True)
+                click.secho(str(table), fg='green')
 
-        if alert_message:
-            click.secho(alert_message, fg=color_alert_message)
-
-        self._display_progress_bar()
-
+                if alert_message:
+                    click.secho(alert_message, fg=color_alert_message)
+                time.sleep(1)
+                click.clear()
 
     def _get_alarm_message(self, event: StateChangeEvent) -> str:
         message = ""
@@ -137,13 +148,6 @@ class Screen:
             message = f"Back to normal traffic generated at {date_formatted}"
 
         return message
-
-    def _display_progress_bar(self):
-        with click.progressbar(self._progress_bar) as bar:
-            for x in bar:
-                print(f"new stats in ({x})...")
-                time.sleep(1)
-
 
 class TTLIntervalCache(Observable):
     """

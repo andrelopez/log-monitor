@@ -37,11 +37,9 @@ class ServerStateMachine(Observable):
 
     def _validate_events(self, new_state, average_hits, unix_timestamp):
         if self._is_state_change_to_high_traffic(new_state):
-            print(f'High traffic {unix_timestamp}')
             self._trigger_on_high_traffic_event(average_hits, unix_timestamp)
 
         if self._is_state_change_to_good_traffic(new_state):
-            print(f'Back to good {unix_timestamp}')
             self._trigger_on_good_traffic_event(average_hits, unix_timestamp)
 
     def _trigger_on_high_traffic_event(self, average_hits, unix_timestamp):

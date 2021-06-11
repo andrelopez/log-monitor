@@ -1,5 +1,5 @@
 from src.model.server import Request, ServerStateMachine
-from src.config import ALERT_INTERVAL, DISPLAY_INTERVAL, LOG_DELAY
+from src.config import ALERT_INTERVAL, DISPLAY_INTERVAL, LOG_DELAY, CSV_COLUMNS
 from src.utils.utils import TTLIntervalCache, TTLRequestCache
 import threading
 import time
@@ -43,12 +43,12 @@ class Agent:
             yield line
 
     def _process_request(self, log_line: str):
+        if not self._is_valid_line(log_line):
+            return
+
         request = Request(log_line)
         self.requests.append(request)
         self._interval_cache.append(request.timestamp)
 
-        # self._stats.add_request(request)
-        #
-        # if self._stats.should_raise_event(request):
-        #     self._fire_new_data_event()
-        #     self._stats.add_request(request)
+    def _is_valid_line(self, log_line: str):
+        return True if len(log_line.split(',')) == CSV_COLUMNS else False
