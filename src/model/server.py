@@ -1,4 +1,5 @@
 from src.state_machine.state import ServerState
+from src.event.event import StateChangeEvent
 from datetime import datetime
 import zope.event
 
@@ -27,8 +28,31 @@ class ServerStateMachine(Observable):
     def __init__(self):
         self._server_state = ServerState.GOOD
 
-    def set_server_state(self, state):
-        self._server_state = state
+    def set_server_state(self, new_state, average_hits, unix_timestamp):
+        self._validate_events(new_state, average_hits, unix_timestamp)
+        self._server_state = new_state
 
     def get_server_state(self):
         return self._server_state
+
+    def _validate_events(self, new_state, average_hits, unix_timestamp):
+        if self._is_state_change_to_high_traffic(new_state):
+            print(f'High traffic {unix_timestamp}')
+            self._trigger_on_high_traffic_event(average_hits, unix_timestamp)
+
+        if self._is_state_change_to_good_traffic(new_state):
+            print(f'Back to good {unix_timestamp}')
+            self._trigger_on_high_traffic_event(average_hits, unix_timestamp)
+
+    def _trigger_on_high_traffic_event(self, average_hits, unix_timestamp):
+        self.notify(StateChangeEvent(ServerState.HIGH_TRAFFIC, average_hits, unix_timestamp))
+
+    def _trigger_on_good_traffic_event(self, average_hits, unix_timestamp):
+        self.notify(StateChangeEvent(ServerState.GOOD, average_hits, unix_timestamp))
+
+    def _is_state_change_to_high_traffic(self, new_state):
+        return self._server_state == ServerState.GOOD and new_state == ServerState.HIGH_TRAFFIC
+
+    def _is_state_change_to_good_traffic(self, new_state):
+        return self._server_state == ServerState.HIGH_TRAFFIC and new_state == ServerState.GOOD
+

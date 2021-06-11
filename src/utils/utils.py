@@ -1,12 +1,14 @@
-from src.config import SCREEN_INTERVAL, TOP_SECTIONS
+from src.config import SCREEN_INTERVAL, TOP_SECTIONS, THRESHOLD, ALERT_INTERVAL
 from src.event.event import StateChangeEvent, NewRequestsEvent
-from src.model.server import Observable, Request
+from src.model.server import Observable, Request, ServerStateMachine
+from src.state_machine.state import ServerState
 from collections import deque
 from columnar import columnar
 from typing import List, Dict
 import click
 import heapq
 import time
+from datetime import datetime
 
 
 class Screen:
@@ -27,6 +29,8 @@ class Screen:
 
         def __init__(self, requests: List[Request]):
             self._requests = requests
+            self.from_request = requests[0] if self._requests else None
+            self.to_request = requests[-1] if self._requests else None
             self._top_sections = []
             self._process_stats()
 
@@ -58,29 +62,57 @@ class Screen:
 
     def __init__(self):
         self._new_data_queue = deque([])
-        self._alarms_new_data_queue = deque([])
+        self._alarms_queue = deque([])
         self._progress_bar = [second for second in reversed(range(1, SCREEN_INTERVAL + 1))]
+        self._last_alarm = None
+        self._server_status = ServerState.GOOD
 
     def on_new_data(self, event: NewRequestsEvent):
-        print('NEW REQUESTS EVENT: ' + str(len(event.requests)))
+        if not isinstance(event, NewRequestsEvent):
+            return
 
         stats = self.Stats(event.requests)
-        self._new_data_queue.append(stats.get_top_sections())
+        self._new_data_queue.append(stats)
         self._draw()
 
     def on_server_state_change(self, event: StateChangeEvent):
-        pass
+        if not isinstance(event, StateChangeEvent):
+            return
+
+        self._alarms_queue.append(event)
 
     def _draw(self):
         click.clear()
 
-        traffic_stats = self._new_data_queue.popleft()
+        stats = self._new_data_queue.popleft()
+        traffic_stats = stats.get_top_sections()
+
+        alert_message = None
+        color_alert_message = 'blue'
+        if not self._last_alarm and self._alarms_queue:
+            self._last_alarm = self._alarms_queue.popleft()
+
+        if self._last_alarm:
+            if self._last_alarm.timestamp < stats.to_request.timestamp:
+                alert_message = self._get_alarm_message(self._last_alarm)
+                self._server_status = self._last_alarm.server_state
+                if self._last_alarm.server_state == ServerState.HIGH_TRAFFIC:
+                    color_alert_message = 'red'
+
+                self._last_alarm = None
 
         if not traffic_stats:
             click.secho('No HTTP requests', fg='green')
             return
 
         click.secho('*****LOG MONITOR*******', fg='green')
+        click.secho(f'From: {stats.from_request.date}', fg='green')
+        click.secho(f'To: {stats.to_request.date}', fg='green')
+        click.secho(f'Alarms in the queue {len(self._alarms_queue)}', fg='green')
+        color_server_status = 'blue'
+        if self._server_status == ServerState.HIGH_TRAFFIC:
+            color_server_status = 'red'
+        click.secho(f'Sever Status: {self._server_status.name}', fg=color_server_status)
         table = []
         for traffic_stat in traffic_stats:
             row = [traffic_stat.section, traffic_stat.total_hits]
@@ -89,10 +121,22 @@ class Screen:
         table = columnar(table, no_borders=True)
         click.secho(str(table), fg='green')
 
+        if alert_message:
+            click.secho(alert_message, fg=color_alert_message)
+
         self._display_progress_bar()
 
-        # if alert_message:
-        #     click.secho(alert_message, fg='red')
+
+    def _get_alarm_message(self, event: StateChangeEvent) -> str:
+        message = ""
+        date_formatted = datetime.utcfromtimestamp(event.timestamp).strftime('%Y-%m-%d %H:%M:%S')
+
+        if event.server_state == ServerState.HIGH_TRAFFIC:
+            message = f"High Traffic generated an alert - hits {event.average_hits:.2f} triggered at {date_formatted}"
+        elif event.server_state == ServerState.GOOD:
+            message = f"Back to normal traffic generated at {date_formatted}"
+
+        return message
 
     def _display_progress_bar(self):
         with click.progressbar(self._progress_bar) as bar:
@@ -101,30 +145,71 @@ class Screen:
                 time.sleep(1)
 
 
-class TTLCache:
+class TTLIntervalCache(Observable):
     """
     This class will handle a TTL list Where the values are timestamps
 
     - We'll store UNIX timestamps, reading from a file that may not respect the order
     to fix this issue let's use a Min HEAP where the root will be always the oldest
     request, this will give us O(log N) time complexity for resize instead of the
-    O(1) for normal list but this will give us 100% accuracy for triggering alarms
+    O(N) for normal list and this will give us 100% accuracy for triggering alarms
 
 
-    The HEAP will be re-size on LEN and APPEND checking the root timestamp (Oldest or min timestamp)
+    The HEAP will re-size on LEN and APPEND checking the root timestamp (Oldest or min timestamp)
     - On APPEND -> will compare the head with the new timestamp and remove from head
-    - On LEN -> will compare the head with  the tail and remove from head
     """
-    def __init__(self, ttl: int):
+    def __init__(self, ttl: int, log_delay: int, server_state_machine: ServerStateMachine):
         self.ttl = ttl
+        self.log_delay = log_delay
+        self.server_state_machine = server_state_machine
         self._heap = []
+        self._delay_queue = deque([])
+        self._window_size = self.ttl - 1
 
     def append(self, unix_timestamp: int):
+        if not self._is_empty() and self._is_outside_alert_interval(unix_timestamp):
+            self._handle_delay_queue(unix_timestamp)
+            return
+
+        self._insert(unix_timestamp)
+
+    def _insert(self, unix_timestamp: int):
         self._resize(unix_timestamp)
         heapq.heappush(self._heap, unix_timestamp)
+        self._set_state_machine(unix_timestamp)
 
-    def __len__(self):
-        return len(self._heap)
+    def _handle_delay_queue(self, unix_timestamp):
+        """
+        This method will store any timestamp outside the (ALERT_INTERVAL + LOG_DELAY) window in a queue
+        once a timestamp > (ALERT_INTERVAL + LOG_DELAY) we'll restore all the values in the delay queue
+        one by one into our MIN HEAP calling the insert method that will check also the machine state.
+        """
+        self._delay_queue.append(unix_timestamp)
+
+        if self._is_outside_delay_interval(unix_timestamp):
+            while self._delay_queue:
+                self._insert(self._delay_queue.popleft())
+
+    def _is_outside_alert_interval(self, unix_timestamp: int) -> bool:
+        return unix_timestamp > self._get_oldest() + self._window_size
+
+    def _is_outside_delay_interval(self, unix_timestamp: int) -> bool:
+        return unix_timestamp > self._get_oldest() + (self._window_size + self.log_delay)
+
+    def _set_state_machine(self, unix_timestamp):
+        if self._is_high_traffic():
+            self.server_state_machine.set_server_state(ServerState.HIGH_TRAFFIC, self._get_average_hits_by_second(), unix_timestamp)
+        else:
+            self.server_state_machine.set_server_state(ServerState.GOOD, self._get_average_hits_by_second(), unix_timestamp)
+
+    def _is_high_traffic(self) -> bool:
+        return self._get_average_hits_by_second() >= THRESHOLD
+
+    def _get_average_hits_by_second(self):
+        return len(self._heap) / ALERT_INTERVAL
+
+    def _get_oldest(self):
+        return self._heap[0]
 
     def _resize(self, timestamp_to_compare: int):
         if self._is_empty():
@@ -136,7 +221,7 @@ class TTLCache:
             needs_resize = False
             head = self._get_head()
             diff = timestamp_to_compare - head
-            if diff > self.ttl:
+            if diff > self._window_size:
                 self._remove_oldest()
                 needs_resize = True
 
@@ -155,7 +240,7 @@ class TTLCache:
 
 class TTLRequestCache(Observable):
     """
-    This class will store requests in a MIN heap
+    This class will store requests in a MIN heap data structure
     the oldest request will be at the root
     and to fix order requests from the log file
     we we'll fire the event of new data after a new request
