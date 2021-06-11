@@ -149,6 +149,7 @@ class Screen:
 
         return message
 
+
 class TTLIntervalCache(Observable):
     """
     This class will handle a TTL list Where the values are timestamps
@@ -159,7 +160,7 @@ class TTLIntervalCache(Observable):
     O(N) for normal list and this will give us 100% accuracy for triggering alarms
 
 
-    The HEAP will re-size on LEN and APPEND checking the root timestamp (Oldest or min timestamp)
+    The HEAP will re-size on APPEND checking the root timestamp (Oldest or min timestamp)
     - On APPEND -> will compare the head with the new timestamp and remove from head
     """
     def __init__(self, ttl: int, log_delay: int, server_state_machine: ServerStateMachine):
@@ -248,7 +249,7 @@ class TTLRequestCache(Observable):
     the oldest request will be at the root
     and to fix order requests from the log file
     we we'll fire the event of new data after a new request
-    is higher than DISPLAY_INTERVAL + LOG_DELAY
+    if is higher than DISPLAY_INTERVAL + LOG_DELAY
     the LOG_DELAY can be updated on the config file as needed
     """
     def __init__(self, ttl: int, log_delay: int):

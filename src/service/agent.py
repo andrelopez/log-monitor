@@ -6,7 +6,14 @@ import threading
 
 class Agent:
     """
-    Agent will be reading the log file and calling
+    The Agent will receive a filepath and a server_state_machine as parameters
+    The run method should be called  to start the agent, it will read the file and stop when reach the last line,
+    Subscribers can listen the following events:
+        - add_data_subscriber -> it will notify with a NewRequestsEvent
+        - add_state_change_subscriber -> it will notify with a StateChangeEvent
+
+    The agent will use a MIN HEAP data structure to handle the alarm intervals and requests
+    please take a look to the TTLIntervalCache and TTLRequestCache classes respectively
     """
 
     def __init__(self, file_path: str, server_state_machine: ServerStateMachine):
@@ -16,11 +23,11 @@ class Agent:
 
         self._file_path = file_path
         self._alert_message = ''
-        self._agent_daemon = threading.Thread(target=self._read_file)
+        self._agent_thread = threading.Thread(target=self._read_file)
         self._high_traffic_recovered = True
 
     def run(self):
-        self._agent_daemon.start()
+        self._agent_thread.start()
 
     def add_data_subscriber(self, function):
         self.requests.add_subscriber(function)

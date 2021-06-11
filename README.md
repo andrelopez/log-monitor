@@ -25,9 +25,9 @@ Create a new Python 3 environment called venv and activate it (Mac or Linux):
 
 ### Tests
 
-Tests are managed by [pytest](https://docs.pytest.org/en/6.2.x/contents.html), the tests are under the `test` directory, 
+The tests are under the `tests` directory
 you can run the tests with the following command:
 
 ```bash
-~$ (venv) pytest tests -v   
+~$ python -m unittest  tests/test_log_monitor.py   
 ```
